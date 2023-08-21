@@ -18,7 +18,7 @@ class GroceryList extends StatefulWidget {
 class _GroceryListState extends State<GroceryList> {
   List<GroceryItem> _groceryItems = [];
   bool _isLoading = true;
-  String? _isError;
+  String? _error;
 
   @override
   void initState() {
@@ -29,35 +29,54 @@ class _GroceryListState extends State<GroceryList> {
   void _loadItems() async {
     final url = Uri.https("flutter-backend-dummy-default-rtdb.firebaseio.com",
         'shopping-list.json');
-    final response = await http.get(url);
 
-    if (response.statusCode >= 400) {
+    try {
+      final response = await http.get(url);
+
+      if (response.statusCode >= 400) {
+        setState(() {
+          _error = "Failed to fetch data. Try reloading one more time.";
+        });
+      }
+
+      // will be null on the first load from firebase when there is no data
+      // backend specific logic should be given since it will be different incase of different
+      // backend. For firebase it will be a string null
+      // if (response.body == null) {
+      if (response.body == "null") {
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+      // print(response.body);
+      // ! json encode decode method from dart:convert package
+      final parsedJSON = json.decode(response.body);
+      final Map<String, dynamic> listData = parsedJSON;
+
+      final List<GroceryItem> loadedItems = [];
+      for (final item in listData.entries) {
+        final Category categoryFound = categories.entries
+            .firstWhere(
+                (element) => element.value.name == item.value['category'])
+            .value;
+        loadedItems.add(GroceryItem(
+            id: item.key,
+            name: item.value['name'],
+            quantity: item.value['quantity'],
+            category: categoryFound));
+      }
+
       setState(() {
-        _isError = "Failed to fetch data. Try reloading one more time.";
+        _groceryItems = loadedItems;
+        _isLoading = false;
+      });
+    } catch (err) {
+      print(err);
+      setState(() {
+        _error = "Something went wrong. Please try again after sometime.";
       });
     }
-
-    print(response.body);
-    // ! json encode decode method from dart:convert package
-    final parsedJSON = json.decode(response.body);
-    final Map<String, dynamic> listData = parsedJSON;
-
-    final List<GroceryItem> loadedItems = [];
-    for (final item in listData.entries) {
-      final Category categoryFound = categories.entries
-          .firstWhere((element) => element.value.name == item.value['category'])
-          .value;
-      loadedItems.add(GroceryItem(
-          id: item.key,
-          name: item.value['name'],
-          quantity: item.value['quantity'],
-          category: categoryFound));
-    }
-
-    setState(() {
-      _groceryItems = loadedItems;
-      _isLoading = false;
-    });
   }
 
   void _addNewItem() async {
@@ -138,9 +157,9 @@ class _GroceryListState extends State<GroceryList> {
       );
     }
 
-    if (_isError != null) {
+    if (_error != null) {
       content = Center(
-        child: Text(_isError!),
+        child: Text(_error!),
       );
     }
 

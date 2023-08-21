@@ -1,3 +1,7 @@
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+
 import 'package:flutter/material.dart';
 import 'package:shopping_list_app/data/categories.dart';
 import 'package:shopping_list_app/models/category.dart';
@@ -19,11 +23,37 @@ class _NewItemState extends State<NewItem> {
   int _newQuantity = 1;
   Category _category = categories[Categories.carbs]!;
 
-  void _saveForm() {
+  void _saveForm() async {
     if (_formKey.currentState!.validate()) {
       _formKey.currentState!.save();
+
+      // ! the second argument is the path to the first
+      Uri url = Uri.https("flutter-backend-dummy-default-rtdb.firebaseio.com",
+          'shopping-list.json');
+      var result = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: json.encode(
+          {
+            "name": _newName,
+            "quantity": _newQuantity,
+            "category": _category.name,
+          },
+        ),
+      );
+
+      final Map<String, dynamic> resData = json.decode(result.body);
+
+      // ! IMP we shouldn't use context across async as can be seen on hovering over
+      // ! it. So we just check if its not mounted we return it without doing anything
+      // ! This is the correct way and officially recommended way of using context
+      if (!context.mounted) {
+        return;
+      }
       Navigator.of(context).pop(GroceryItem(
-        id: DateTime.now().toString(),
+        id: resData['name'],
         name: _newName,
         quantity: _newQuantity,
         category: _category,

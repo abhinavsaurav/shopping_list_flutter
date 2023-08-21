@@ -17,17 +17,27 @@ class GroceryList extends StatefulWidget {
 
 class _GroceryListState extends State<GroceryList> {
   List<GroceryItem> _groceryItems = [];
+  bool _isLoading = true;
+  String? _isError;
 
   @override
   void initState() {
     super.initState();
-    _LoadItems();
+    _loadItems();
   }
 
-  void _LoadItems() async {
+  void _loadItems() async {
     final url = Uri.https("flutter-backend-dummy-default-rtdb.firebaseio.com",
         'shopping-list.json');
     final response = await http.get(url);
+
+    if (response.statusCode >= 400) {
+      setState(() {
+        _isError = "Failed to fetch data. Try reloading one more time.";
+      });
+    }
+
+    print(response.body);
     // ! json encode decode method from dart:convert package
     final parsedJSON = json.decode(response.body);
     final Map<String, dynamic> listData = parsedJSON;
@@ -46,6 +56,7 @@ class _GroceryListState extends State<GroceryList> {
 
     setState(() {
       _groceryItems = loadedItems;
+      _isLoading = false;
     });
   }
 
@@ -65,27 +76,53 @@ class _GroceryListState extends State<GroceryList> {
     });
   }
 
+  void _removeItem(GroceryItem item) async {
+    final index = _groceryItems.indexOf(item);
+
+    // ! we are first removing it locally
+    // ! then we will make a call and wait for it to happen if the deletion fails
+    setState(() {
+      _groceryItems.remove(item);
+      // _groceryItems = _groceryItems
+      //     .where((element) => element.id != _groceryItems[index].id)
+      //     .toList();
+    });
+
+    final url = Uri.https("flutter-backend-dummy-default-rtdb.firebaseio.com",
+        'shopping-list/${item.id}.json');
+
+    final response = await http.delete(url);
+    print(response.body);
+
+    if (response.statusCode >= 400) {
+      // optional : show error message
+
+      setState(() {
+        _groceryItems.insert(index, item);
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    Widget content;
-    if (_groceryItems.isEmpty) {
+    Widget content = const Center(
+      child: Text("No data found"),
+    );
+
+    if (_isLoading) {
       content = const Center(
-        child: Text("No data found"),
+        child: CircularProgressIndicator(),
       );
-    } else {
+    }
+
+    if (_groceryItems.isNotEmpty) {
       content = ListView.builder(
         itemCount: _groceryItems.length,
         itemBuilder: (context, index) {
           return Dismissible(
             key: ValueKey(_groceryItems[index].id),
             onDismissed: (direction) {
-              setState(() {
-                _groceryItems.remove(_groceryItems[index]);
-
-                // _groceryItems = _groceryItems
-                //     .where((element) => element.id != _groceryItems[index].id)
-                //     .toList();
-              });
+              _removeItem(_groceryItems[index]);
             },
             child: ListTile(
               title: Text(_groceryItems[index].name),
@@ -100,6 +137,13 @@ class _GroceryListState extends State<GroceryList> {
         },
       );
     }
+
+    if (_isError != null) {
+      content = Center(
+        child: Text(_isError!),
+      );
+    }
+
     return Scaffold(
         appBar: AppBar(
           title: const Text("Your grocery list"),
